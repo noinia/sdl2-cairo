@@ -99,7 +99,6 @@ type Byte = Word8
 type Color = V4 Byte
 
 data CanvasState = CanvasState{ csSize :: V2 Double,    -- ^ texture size
-                                csSurface :: C.Surface, -- ^ Cairo surface
                                 csFG :: Maybe Color,    -- ^ stroke color
                                 csBG :: Maybe Color,    -- ^ fill color
                                 csImages :: [Image]     -- ^ keep track of images to free later
@@ -128,7 +127,6 @@ withCairoSurface :: V2 Double -- ^ the size at which we want to draw
 withCairoSurface size s c = do
   let defaults  = strokeWeight 1 >> strokeCap C.LineCapRound
       initstate = CanvasState{ csSize = size
-                             , csSurface = s
                              , csFG = Just $ gray 0
                              , csBG = Just $ gray 255
                              , csImages = []
@@ -433,16 +431,15 @@ image' img@(Image _ (V2 ow oh) _) =
 -- operator and resizing when necessary. Use 'OperatorSource' to copy without
 -- blending effects. (Processing: @copy(),blend()@)
 blend :: Operator -> Image -> Dim -> Dim -> Canvas ()
-blend op (Image s _ _) sdim ddim = do
-  surf <- gets csSurface
-  lift $ copyFromToSurface op s sdim surf ddim
+blend op (Image s _ _) sdim ddim = lift $ C.withTargetSurface $ \surf ->
+  copyFromToSurface op s sdim surf ddim
 
 -- | get a copy of the image from current window (Processing: @get()@)
 grab :: Dim -> Canvas Image
 grab dim@(D _ _ w h) = do
-  surf <- gets csSurface
   i@(Image s _ _) <- createImage (V2 (round w) (round h))
-  lift $ copyFromToSurface OperatorSource surf dim s (D 0 0 w h)
+  lift $ C.withTargetSurface $ \surf ->
+    copyFromToSurface OperatorSource surf dim s (D 0 0 w h)
   return i
 
 ----
