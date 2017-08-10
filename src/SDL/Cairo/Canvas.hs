@@ -47,7 +47,7 @@ main = do
 -}
 module SDL.Cairo.Canvas (
   -- * Entry point
-  Canvas, withCanvas, getCanvasSize,
+  Canvas, withCanvas, withCairoSurface, getCanvasSize,
   -- * Color and Style
   Color, Byte, gray, red, green, blue, rgb, (!@),
   stroke, fill, noStroke, noFill, strokeWeight, strokeJoin, strokeCap,
@@ -119,15 +119,22 @@ type Canvas = RenderWrapper Render
 withCanvas :: Texture -> Canvas a -> IO a
 withCanvas t c = withCairoTexture' t $ \s -> do
   (TextureInfo _ _ w h) <- queryTexture t
+  withCairoSurface (V2 (fromIntegral w) (fromIntegral h)) s c
+
+
+-- | draw on a Cairo surface using the 'Canvas' monad
+withCairoSurface :: V2 Double -- ^ the size at which we want to draw
+                 -> C.Surface -> Canvas a -> IO a
+withCairoSurface size s c = do
   let defaults  = strokeWeight 1 >> strokeCap C.LineCapRound
-      initstate = CanvasState{ csSize = V2 (fromIntegral w) (fromIntegral h)
+      initstate = CanvasState{ csSize = size
                              , csSurface = s
                              , csFG = Just $ gray 0
                              , csBG = Just $ gray 255
                              , csImages = []
                              }
   (ret, result) <- C.renderWith s $ runStateT (unCanvas $ defaults >> c) initstate
-  forM_ (csImages result) $ \(Image s _ _) -> C.surfaceFinish s
+  forM_ (csImages result) $ \(Image s' _ _) -> C.surfaceFinish s'
   return ret
 
 ----
