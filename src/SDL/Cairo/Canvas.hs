@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP,GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE RankNTypes #-}
 {-|
 Module      : SDL.Cairo.Canvas
 Copyright   : Copyright (c) 2015 Anton Pirogov
@@ -47,7 +48,7 @@ main = do
 -}
 module SDL.Cairo.Canvas (
   -- * Entry point
-  Canvas, withCanvas, withCairoSurface, getCanvasSize,
+  Canvas, withCanvas, withCairoSurface, withRenderer, getCanvasSize,
   -- * Color and Style
   Color, Byte, gray, red, green, blue, rgb, (!@),
   stroke, fill, noStroke, noFill, strokeWeight, strokeJoin, strokeCap,
@@ -118,20 +119,27 @@ type Canvas = RenderWrapper Render
 withCanvas :: Texture -> Canvas a -> IO a
 withCanvas t c = withCairoTexture' t $ \s -> do
   (TextureInfo _ _ w h) <- queryTexture t
-  withCairoSurface (V2 (fromIntegral w) (fromIntegral h)) s c
-
+  withCairoSurface s (V2 (fromIntegral w) (fromIntegral h)) c
 
 -- | draw on a Cairo surface using the 'Canvas' monad
-withCairoSurface :: V2 Double -- ^ the size at which we want to draw
-                 -> C.Surface -> Canvas a -> IO a
-withCairoSurface size s c = do
+withCairoSurface :: C.Surface
+                 -> V2 Double -- ^ the size at which we want to draw
+                 -> Canvas a -> IO a
+withCairoSurface s = withRenderer (C.renderWith s)
+
+-- | Draw, using the given renderer, in the 'Canvas' monad
+withRenderer :: (forall a. Render a -> IO a) -- ^ the renderer to use
+             -> V2 Double -- ^ Size of the canvas at which we want to draw
+             -> Canvas a
+             -> IO a
+withRenderer renderer size c = do
   let defaults  = strokeWeight 1 >> strokeCap C.LineCapRound
       initstate = CanvasState{ csSize = size
                              , csFG = Just $ gray 0
                              , csBG = Just $ gray 255
                              , csImages = []
                              }
-  (ret, result) <- C.renderWith s $ runStateT (unCanvas $ defaults >> c) initstate
+  (ret, result) <- renderer $ runStateT (unCanvas $ defaults >> c) initstate
   forM_ (csImages result) $ \(Image s' _ _) -> C.surfaceFinish s'
   return ret
 
